@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const exercise_controller_1 = require("../controllers/exercise.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.post("/", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), exercise_controller_1.createExercise);
+router.get("/", auth_middleware_1.protect, exercise_controller_1.getExercises);
+router.get("/:id", auth_middleware_1.protect, exercise_controller_1.getExerciseById);
+router.put("/:id", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), exercise_controller_1.updateExercise);
+router.delete("/:id", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), exercise_controller_1.deleteExercise);
+exports.default = router;

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import { User } from "../models/user.model";
 
 export const createStudent = async (
@@ -16,7 +17,9 @@ export const createStudent = async (
       return;
     }
 
-    const studentExists = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const studentExists = await User.findOne({ email: normalizedEmail });
 
     if (studentExists) {
       res.status(400).json({
@@ -30,7 +33,7 @@ export const createStudent = async (
     const student = await User.create({
       name,
       lastName,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role: "student",
       active: true,
@@ -39,12 +42,15 @@ export const createStudent = async (
     res.status(201).json({
       message: "Alumno creado correctamente",
       student: {
-        id: student._id,
+        _id: student._id,
         name: student.name,
         lastName: student.lastName,
         email: student.email,
         role: student.role,
         active: student.active,
+        assignedRoutine: student.assignedRoutine,
+        createdAt: student.createdAt,
+        updatedAt: student.updatedAt,
       },
     });
   } catch (error) {
@@ -62,6 +68,7 @@ export const getStudents = async (
   try {
     const students = await User.find({ role: "student" })
       .select("-password")
+      .populate("assignedRoutine", "name level objective")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -83,10 +90,19 @@ export const getStudentById = async (
   try {
     const { id } = req.params;
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        message: "ID de alumno inválido",
+      });
+      return;
+    }
+
     const student = await User.findOne({
       _id: id,
       role: "student",
-    }).select("-password");
+    })
+      .select("-password")
+      .populate("assignedRoutine", "name level objective");
 
     if (!student) {
       res.status(404).json({
@@ -113,7 +129,14 @@ export const updateStudent = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, lastName, email, active } = req.body;
+    const { name, lastName, email, password, active } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        message: "ID de alumno inválido",
+      });
+      return;
+    }
 
     const student = await User.findOne({
       _id: id,
@@ -127,20 +150,35 @@ export const updateStudent = async (
       return;
     }
 
-    if (email && email !== student.email) {
-      const emailExists = await User.findOne({ email });
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
 
-      if (emailExists) {
-        res.status(400).json({
-          message: "Ya existe un usuario con ese email",
-        });
-        return;
+      if (normalizedEmail !== student.email) {
+        const emailExists = await User.findOne({ email: normalizedEmail });
+
+        if (emailExists) {
+          res.status(400).json({
+            message: "Ya existe un usuario con ese email",
+          });
+          return;
+        }
+
+        student.email = normalizedEmail;
       }
     }
 
-    student.name = name || student.name;
-    student.lastName = lastName || student.lastName;
-    student.email = email || student.email;
+    if (name) {
+      student.name = name;
+    }
+
+    if (lastName) {
+      student.lastName = lastName;
+    }
+
+    if (password && password.trim().length > 0) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      student.password = hashedPassword;
+    }
 
     if (typeof active === "boolean") {
       student.active = active;
@@ -148,16 +186,13 @@ export const updateStudent = async (
 
     await student.save();
 
+    const updatedStudent = await User.findById(student._id)
+      .select("-password")
+      .populate("assignedRoutine", "name level objective");
+
     res.json({
       message: "Alumno actualizado correctamente",
-      student: {
-        id: student._id,
-        name: student.name,
-        lastName: student.lastName,
-        email: student.email,
-        role: student.role,
-        active: student.active,
-      },
+      student: updatedStudent,
     });
   } catch (error) {
     res.status(500).json({
@@ -173,6 +208,13 @@ export const deactivateStudent = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        message: "ID de alumno inválido",
+      });
+      return;
+    }
 
     const student = await User.findOne({
       _id: id,
