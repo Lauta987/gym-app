@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyRoutine = exports.assignRoutineToStudent = exports.getRoutineById = exports.getRoutines = exports.createRoutine = void 0;
+exports.getMyRoutine = exports.assignRoutineToStudent = exports.deleteRoutine = exports.updateRoutine = exports.getRoutineById = exports.getRoutines = exports.createRoutine = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const routine_model_1 = require("../models/routine.model");
 const exercise_model_1 = require("../models/exercise.model");
@@ -175,6 +175,145 @@ const getRoutineById = async (req, res) => {
     }
 };
 exports.getRoutineById = getRoutineById;
+const updateRoutine = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, description, objective, level, days } = req.body;
+        if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
+            res.status(400).json({
+                message: "ID de rutina inválido",
+            });
+            return;
+        }
+        const routine = await routine_model_1.Routine.findOne({
+            _id: id,
+            active: true,
+        });
+        if (!routine) {
+            res.status(404).json({
+                message: "Rutina no encontrada",
+            });
+            return;
+        }
+        if (!name) {
+            res.status(400).json({
+                message: "El nombre de la rutina es obligatorio",
+            });
+            return;
+        }
+        if (!Array.isArray(days) || days.length === 0) {
+            res.status(400).json({
+                message: "La rutina debe tener al menos un día",
+            });
+            return;
+        }
+        for (const day of days) {
+            if (!day.dayName) {
+                res.status(400).json({
+                    message: "Cada día debe tener un nombre",
+                });
+                return;
+            }
+            if (!Array.isArray(day.exercises) || day.exercises.length === 0) {
+                res.status(400).json({
+                    message: "Cada día debe tener al menos un ejercicio",
+                });
+                return;
+            }
+            for (const item of day.exercises) {
+                if (!item.exerciseId || !item.sets || !item.reps || !item.rest) {
+                    res.status(400).json({
+                        message: "Cada ejercicio debe tener exerciseId, sets, reps y rest",
+                    });
+                    return;
+                }
+                if (!mongoose_1.default.Types.ObjectId.isValid(item.exerciseId)) {
+                    res.status(400).json({
+                        message: "Uno de los exerciseId no es válido",
+                    });
+                    return;
+                }
+            }
+        }
+        const exerciseIds = days.flatMap((day) => day.exercises.map((item) => item.exerciseId));
+        const uniqueExerciseIds = [...new Set(exerciseIds)];
+        const existingExercises = await exercise_model_1.Exercise.find({
+            _id: { $in: uniqueExerciseIds },
+            active: true,
+        });
+        if (existingExercises.length !== uniqueExerciseIds.length) {
+            res.status(400).json({
+                message: "Uno o más ejercicios no existen o están inactivos",
+            });
+            return;
+        }
+        routine.name = name;
+        routine.description = description;
+        routine.objective = objective;
+        routine.level = level || "principiante";
+        routine.days = days.map((day, dayIndex) => ({
+            dayName: day.dayName,
+            order: day.order || dayIndex + 1,
+            exercises: day.exercises.map((item, exerciseIndex) => ({
+                exerciseId: new mongoose_1.Types.ObjectId(item.exerciseId),
+                sets: item.sets,
+                reps: item.reps,
+                rest: item.rest,
+                order: item.order || exerciseIndex + 1,
+                notes: item.notes,
+            })),
+        }));
+        await routine.save();
+        const populatedRoutine = await routine_model_1.Routine.findById(routine._id)
+            .populate("days.exercises.exerciseId", "name description videoUrl imageUrl muscles difficulty")
+            .populate("createdBy", "name lastName email role");
+        res.json({
+            message: "Rutina actualizada correctamente",
+            routine: populatedRoutine,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            message: "Error al actualizar rutina",
+            error,
+        });
+    }
+};
+exports.updateRoutine = updateRoutine;
+const deleteRoutine = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
+            res.status(400).json({
+                message: "ID de rutina inválido",
+            });
+            return;
+        }
+        const routine = await routine_model_1.Routine.findOne({
+            _id: id,
+            active: true,
+        });
+        if (!routine) {
+            res.status(404).json({
+                message: "Rutina no encontrada",
+            });
+            return;
+        }
+        routine.active = false;
+        await routine.save();
+        await user_model_1.User.updateMany({ assignedRoutine: routine._id }, { $unset: { assignedRoutine: "" } });
+        res.json({
+            message: "Rutina eliminada correctamente",
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            message: "Error al eliminar rutina",
+            error,
+        });
+    }
+};
+exports.deleteRoutine = deleteRoutine;
 const assignRoutineToStudent = async (req, res) => {
     try {
         const { routineId, studentId } = req.params;

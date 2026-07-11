@@ -2,9 +2,11 @@ import { Router } from "express";
 import {
   assignRoutineToStudent,
   createRoutine,
+  deleteRoutine,
   getMyRoutine,
   getRoutineById,
   getRoutines,
+  updateRoutine,
 } from "../controllers/routine.controller";
 import { authorizeRoles, protect } from "../middlewares/auth.middleware";
 
@@ -17,6 +19,15 @@ router.get("/", protect, authorizeRoles("admin", "trainer"), getRoutines);
 router.get("/my-routine", protect, authorizeRoles("student"), getMyRoutine);
 
 router.get("/:id", protect, getRoutineById);
+
+router.put("/:id", protect, authorizeRoles("admin", "trainer"), updateRoutine);
+
+router.delete(
+  "/:id",
+  protect,
+  authorizeRoles("admin", "trainer"),
+  deleteRoutine
+);
 
 router.put(
   "/:routineId/assign/:studentId",

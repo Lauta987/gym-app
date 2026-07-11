@@ -8,5 +8,7 @@ router.post("/", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles
 router.get("/", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), routine_controller_1.getRoutines);
 router.get("/my-routine", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("student"), routine_controller_1.getMyRoutine);
 router.get("/:id", auth_middleware_1.protect, routine_controller_1.getRoutineById);
+router.put("/:id", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), routine_controller_1.updateRoutine);
+router.delete("/:id", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), routine_controller_1.deleteRoutine);
 router.put("/:routineId/assign/:studentId", auth_middleware_1.protect, (0, auth_middleware_1.authorizeRoles)("admin", "trainer"), routine_controller_1.assignRoutineToStudent);
 exports.default = router;
