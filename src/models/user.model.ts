@@ -21,17 +21,21 @@ const userSchema = new Schema<IUser>(
       type: Schema.Types.ObjectId,
       ref: "Gym",
       required: false,
+      index: true,
     },
+
     name: {
       type: String,
       required: true,
       trim: true,
     },
+
     lastName: {
       type: String,
       required: true,
       trim: true,
     },
+
     email: {
       type: String,
       required: true,
@@ -39,19 +43,23 @@ const userSchema = new Schema<IUser>(
       lowercase: true,
       trim: true,
     },
+
     password: {
       type: String,
       required: true,
     },
+
     role: {
       type: String,
       enum: ["admin", "trainer", "student"],
       default: "student",
     },
+
     active: {
       type: Boolean,
       default: true,
     },
+
     assignedRoutine: {
       type: Schema.Types.ObjectId,
       ref: "Routine",
@@ -63,4 +71,10 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-export const User = mongoose.model<IUser>("User", userSchema); 
+userSchema.index({
+  gymId: 1,
+  role: 1,
+  active: 1,
+});
+
+export const User = mongoose.model<IUser>("User", userSchema);

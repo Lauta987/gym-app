@@ -13,7 +13,11 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    const userExists = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const userExists = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (userExists) {
       return res.status(400).json({
@@ -21,30 +25,46 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
+    const authenticatedUser = (req as any).user;
+
+    /*
+     * Si el registro lo realiza un administrador autenticado,
+     * el nuevo usuario hereda el gimnasio del administrador.
+     *
+     * Mientras terminamos la migración, gymId puede quedar vacío
+     * para los registros antiguos o iniciales.
+     */
+    const gymId = authenticatedUser?.gymId;
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      name,
-      lastName,
-      email,
+      gymId,
+      name: name.trim(),
+      lastName: lastName.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
       role: role || "student",
+      active: true,
     });
 
     return res.status(201).json({
       message: "Usuario registrado correctamente",
       user: {
         id: user._id,
+        gymId: user.gymId ?? null,
         name: user.name,
         lastName: user.lastName,
         email: user.email,
         role: user.role,
+        active: user.active,
       },
     });
   } catch (error) {
+    console.error("Error al registrar usuario:", error);
+
     return res.status(500).json({
-      message: "Error al registrar usuario",
-      error,
+      message: "Error interno al registrar usuario",
     });
   }
 };
@@ -59,7 +79,11 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -84,15 +108,18 @@ export const login = async (req: Request, res: Response) => {
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!jwtSecret) {
+      console.error("JWT_SECRET no está configurado");
+
       return res.status(500).json({
-        message: "No se encontró JWT_SECRET en el archivo .env",
+        message: "Error de configuración del servidor",
       });
     }
 
     const token = jwt.sign(
       {
-        id: user._id,
+        id: user._id.toString(),
         role: user.role,
+        gymId: user.gymId?.toString() ?? null,
       },
       jwtSecret,
       {
@@ -105,31 +132,54 @@ export const login = async (req: Request, res: Response) => {
       token,
       user: {
         id: user._id,
+        gymId: user.gymId ?? null,
         name: user.name,
         lastName: user.lastName,
         email: user.email,
         role: user.role,
+        active: user.active,
       },
     });
   } catch (error) {
+    console.error("Error al iniciar sesión:", error);
+
     return res.status(500).json({
-      message: "Error al iniciar sesión",
-      error,
+      message: "Error interno al iniciar sesión",
     });
   }
-}; 
-export const getProfile = async (req: Request, res: Response) => {
+};
+
+export const getProfile = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const user = (req as any).user;
 
+    if (!user) {
+      return res.status(401).json({
+        message: "Usuario no autenticado",
+      });
+    }
+
     return res.json({
       message: "Perfil obtenido correctamente",
-      user,
+      user: {
+        id: user._id,
+        gymId: user.gymId ?? null,
+        name: user.name,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+        assignedRoutine: user.assignedRoutine ?? null,
+      },
     });
   } catch (error) {
+    console.error("Error al obtener perfil:", error);
+
     return res.status(500).json({
-      message: "Error al obtener perfil",
-      error,
+      message: "Error interno al obtener perfil",
     });
   }
 }; 

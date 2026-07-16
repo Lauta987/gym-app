@@ -34,6 +34,13 @@ export const createWorkoutLog = async (
       return;
     }
 
+    if (!authenticatedUser.gymId) {
+      res.status(403).json({
+        message: "El alumno no tiene un gimnasio asignado",
+      });
+      return;
+    }
+
     const {
       routineId,
       exerciseId,
@@ -43,7 +50,7 @@ export const createWorkoutLog = async (
       notes,
     } = req.body as CreateWorkoutLogBody;
 
-    if (!routineId || !exerciseId || !dayName) {
+    if (!routineId || !exerciseId || !dayName?.trim()) {
       res.status(400).json({
         message: "La rutina, el ejercicio y el día son obligatorios",
       });
@@ -74,14 +81,20 @@ export const createWorkoutLog = async (
       return;
     }
 
-    if (repsDone !== undefined && repsDone.trim().length > 50) {
+    if (
+      repsDone !== undefined &&
+      (typeof repsDone !== "string" || repsDone.trim().length > 50)
+    ) {
       res.status(400).json({
-        message: "Las repeticiones realizadas son demasiado largas",
+        message: "Las repeticiones realizadas no pueden superar 50 caracteres",
       });
       return;
     }
 
-    if (notes !== undefined && notes.trim().length > 500) {
+    if (
+      notes !== undefined &&
+      (typeof notes !== "string" || notes.trim().length > 500)
+    ) {
       res.status(400).json({
         message: "Las notas no pueden superar los 500 caracteres",
       });
@@ -90,9 +103,10 @@ export const createWorkoutLog = async (
 
     const student = await User.findOne({
       _id: authenticatedUser._id,
+      gymId: authenticatedUser.gymId,
       role: "student",
       active: true,
-    }).select("assignedRoutine");
+    }).select("gymId assignedRoutine");
 
     if (!student) {
       res.status(403).json({
@@ -108,18 +122,17 @@ export const createWorkoutLog = async (
       return;
     }
 
-    /*
-     * Evita que un alumno mande el ID de una rutina que no le pertenece.
-     */
     if (student.assignedRoutine.toString() !== routineId) {
       res.status(403).json({
-        message: "No podés registrar progreso en una rutina que no tenés asignada",
+        message:
+          "No podés registrar progreso en una rutina que no tenés asignada",
       });
       return;
     }
 
     const routine = await Routine.findOne({
       _id: routineId,
+      gymId: authenticatedUser.gymId,
       active: true,
     });
 
@@ -130,11 +143,10 @@ export const createWorkoutLog = async (
       return;
     }
 
-    /*
-     * Busca el día real dentro de la rutina.
-     */
     const routineDay = routine.days.find(
-      (day) => day.dayName.trim().toLowerCase() === dayName.trim().toLowerCase()
+      (day) =>
+        day.dayName.trim().toLowerCase() ===
+        dayName.trim().toLowerCase()
     );
 
     if (!routineDay) {
@@ -144,9 +156,6 @@ export const createWorkoutLog = async (
       return;
     }
 
-    /*
-     * Busca el ejercicio real dentro del día.
-     */
     const routineExercise = routineDay.exercises.find(
       (item) => item.exerciseId.toString() === exerciseId
     );
@@ -158,11 +167,8 @@ export const createWorkoutLog = async (
       return;
     }
 
-    /*
-     * Series, repeticiones y descanso se obtienen de la rutina guardada.
-     * Ya no confiamos en valores enviados desde el frontend.
-     */
     const workoutLog = await WorkoutLog.create({
+      gymId: authenticatedUser.gymId,
       studentId: authenticatedUser._id,
       routineId: routine._id,
       exerciseId: routineExercise.exerciseId,
@@ -177,12 +183,26 @@ export const createWorkoutLog = async (
       completedAt: new Date(),
     });
 
-    const populatedLog = await WorkoutLog.findById(workoutLog._id)
-      .populate(
-        "exerciseId",
-        "name description imageUrl videoUrl muscles difficulty"
-      )
-      .populate("routineId", "name objective level");
+    const populatedLog = await WorkoutLog.findOne({
+      _id: workoutLog._id,
+      gymId: authenticatedUser.gymId,
+      studentId: authenticatedUser._id,
+    })
+      .populate({
+        path: "exerciseId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select:
+          "name description imageUrl videoUrl muscles difficulty",
+      })
+      .populate({
+        path: "routineId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select: "name objective level",
+      });
 
     res.status(201).json({
       message: "Progreso registrado correctamente",
@@ -218,8 +238,16 @@ export const getMyWorkoutLogs = async (
       return;
     }
 
+    if (!authenticatedUser.gymId) {
+      res.status(403).json({
+        message: "El alumno no tiene un gimnasio asignado",
+      });
+      return;
+    }
+
     const student = await User.findOne({
       _id: authenticatedUser._id,
+      gymId: authenticatedUser.gymId,
       role: "student",
       active: true,
     }).select("_id");
@@ -232,13 +260,24 @@ export const getMyWorkoutLogs = async (
     }
 
     const workoutLogs = await WorkoutLog.find({
+      gymId: authenticatedUser.gymId,
       studentId: authenticatedUser._id,
     })
-      .populate(
-        "exerciseId",
-        "name description imageUrl videoUrl muscles difficulty"
-      )
-      .populate("routineId", "name objective level")
+      .populate({
+        path: "exerciseId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select:
+          "name description imageUrl videoUrl muscles difficulty",
+      })
+      .populate({
+        path: "routineId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select: "name objective level",
+      })
       .sort({ completedAt: -1 });
 
     res.json({
@@ -279,6 +318,13 @@ export const getStudentWorkoutLogs = async (
       return;
     }
 
+    if (!authenticatedUser.gymId) {
+      res.status(403).json({
+        message: "El usuario no tiene un gimnasio asignado",
+      });
+      return;
+    }
+
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       res.status(400).json({
         message: "El ID del alumno no es válido",
@@ -288,6 +334,7 @@ export const getStudentWorkoutLogs = async (
 
     const student = await User.findOne({
       _id: studentId,
+      gymId: authenticatedUser.gymId,
       role: "student",
     }).select("-password");
 
@@ -299,13 +346,24 @@ export const getStudentWorkoutLogs = async (
     }
 
     const workoutLogs = await WorkoutLog.find({
+      gymId: authenticatedUser.gymId,
       studentId,
     })
-      .populate(
-        "exerciseId",
-        "name description imageUrl videoUrl muscles difficulty"
-      )
-      .populate("routineId", "name objective level")
+      .populate({
+        path: "exerciseId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select:
+          "name description imageUrl videoUrl muscles difficulty",
+      })
+      .populate({
+        path: "routineId",
+        match: {
+          gymId: authenticatedUser.gymId,
+        },
+        select: "name objective level",
+      })
       .sort({ completedAt: -1 });
 
     res.json({

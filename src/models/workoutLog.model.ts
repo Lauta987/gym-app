@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
 export interface IWorkoutLog extends Document {
+  gymId?: Types.ObjectId;
   studentId: Types.ObjectId;
   routineId: Types.ObjectId;
   exerciseId: Types.ObjectId;
@@ -19,58 +20,76 @@ export interface IWorkoutLog extends Document {
 
 const workoutLogSchema = new Schema<IWorkoutLog>(
   {
+    gymId: {
+      type: Schema.Types.ObjectId,
+      ref: "Gym",
+      required: false,
+      index: true,
+    },
+
     studentId: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
     routineId: {
       type: Schema.Types.ObjectId,
       ref: "Routine",
       required: true,
     },
+
     exerciseId: {
       type: Schema.Types.ObjectId,
       ref: "Exercise",
       required: true,
     },
+
     dayName: {
       type: String,
       required: true,
       trim: true,
     },
+
     dayOrder: {
       type: Number,
       required: true,
     },
+
     setsPlanned: {
       type: Number,
       required: true,
     },
+
     repsPlanned: {
       type: String,
       required: true,
       trim: true,
     },
+
     restPlanned: {
       type: String,
       required: true,
       trim: true,
     },
+
     weight: {
       type: Number,
       required: false,
     },
+
     repsDone: {
       type: String,
       required: false,
       trim: true,
     },
+
     notes: {
       type: String,
       required: false,
       trim: true,
     },
+
     completedAt: {
       type: Date,
       default: Date.now,
@@ -81,7 +100,11 @@ const workoutLogSchema = new Schema<IWorkoutLog>(
   }
 );
 
-workoutLogSchema.index({ studentId: 1, completedAt: -1 });
+workoutLogSchema.index({
+  gymId: 1,
+  studentId: 1,
+  completedAt: -1,
+});
 
 export const WorkoutLog = mongoose.model<IWorkoutLog>(
   "WorkoutLog",
