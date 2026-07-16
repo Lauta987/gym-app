@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 
 import authRoutes from "./routes/auth.routes";
 import studentRoutes from "./routes/student.routes";
@@ -10,6 +11,7 @@ import workoutLogRoutes from "./routes/workoutLog.routes";
 const app = express();
 
 app.set("trust proxy", 1); 
+app.use(helmet()); 
 const allowedOrigins = [
   "http://localhost:5173",
   process.env.FRONTEND_URL,

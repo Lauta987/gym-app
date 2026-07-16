@@ -2,17 +2,12 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { WorkoutLog } from "../models/workoutLog.model";
 import { Routine } from "../models/routine.model";
-import { Exercise } from "../models/exercise.model";
 import { User } from "../models/user.model";
 
 interface CreateWorkoutLogBody {
   routineId: string;
   exerciseId: string;
   dayName: string;
-  dayOrder: number;
-  setsPlanned: number;
-  repsPlanned: string;
-  restPlanned: string;
   weight?: number;
   repsDone?: string;
   notes?: string;
@@ -23,53 +18,102 @@ export const createWorkoutLog = async (
   res: Response
 ): Promise<void> => {
   try {
-    const user = (req as any).user;
+    const authenticatedUser = (req as any).user;
 
-    const {
-      routineId,
-      exerciseId,
-      dayName,
-      dayOrder,
-      setsPlanned,
-      repsPlanned,
-      restPlanned,
-      weight,
-      repsDone,
-      notes,
-    } = req.body as CreateWorkoutLogBody;
+    if (!authenticatedUser?._id) {
+      res.status(401).json({
+        message: "Usuario no autenticado",
+      });
+      return;
+    }
 
-    if (user.role !== "student") {
+    if (authenticatedUser.role !== "student") {
       res.status(403).json({
         message: "Solo los alumnos pueden registrar progreso",
       });
       return;
     }
 
-    if (
-      !routineId ||
-      !exerciseId ||
-      !dayName ||
-      !dayOrder ||
-      !setsPlanned ||
-      !repsPlanned ||
-      !restPlanned
-    ) {
+    const {
+      routineId,
+      exerciseId,
+      dayName,
+      weight,
+      repsDone,
+      notes,
+    } = req.body as CreateWorkoutLogBody;
+
+    if (!routineId || !exerciseId || !dayName) {
       res.status(400).json({
-        message: "Faltan datos obligatorios para registrar el progreso",
+        message: "La rutina, el ejercicio y el día son obligatorios",
       });
       return;
     }
 
     if (!mongoose.Types.ObjectId.isValid(routineId)) {
       res.status(400).json({
-        message: "El routineId no es válido",
+        message: "El ID de la rutina no es válido",
       });
       return;
     }
 
     if (!mongoose.Types.ObjectId.isValid(exerciseId)) {
       res.status(400).json({
-        message: "El exerciseId no es válido",
+        message: "El ID del ejercicio no es válido",
+      });
+      return;
+    }
+
+    if (
+      weight !== undefined &&
+      (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0)
+    ) {
+      res.status(400).json({
+        message: "El peso debe ser un número igual o mayor que cero",
+      });
+      return;
+    }
+
+    if (repsDone !== undefined && repsDone.trim().length > 50) {
+      res.status(400).json({
+        message: "Las repeticiones realizadas son demasiado largas",
+      });
+      return;
+    }
+
+    if (notes !== undefined && notes.trim().length > 500) {
+      res.status(400).json({
+        message: "Las notas no pueden superar los 500 caracteres",
+      });
+      return;
+    }
+
+    const student = await User.findOne({
+      _id: authenticatedUser._id,
+      role: "student",
+      active: true,
+    }).select("assignedRoutine");
+
+    if (!student) {
+      res.status(403).json({
+        message: "La cuenta del alumno no existe o está inactiva",
+      });
+      return;
+    }
+
+    if (!student.assignedRoutine) {
+      res.status(400).json({
+        message: "Todavía no tenés una rutina asignada",
+      });
+      return;
+    }
+
+    /*
+     * Evita que un alumno mande el ID de una rutina que no le pertenece.
+     */
+    if (student.assignedRoutine.toString() !== routineId) {
+      res.status(403).json({
+        message: "No podés registrar progreso en una rutina que no tenés asignada",
       });
       return;
     }
@@ -81,40 +125,63 @@ export const createWorkoutLog = async (
 
     if (!routine) {
       res.status(404).json({
-        message: "Rutina no encontrada",
+        message: "La rutina asignada no existe o está inactiva",
       });
       return;
     }
 
-    const exercise = await Exercise.findOne({
-      _id: exerciseId,
-      active: true,
-    });
+    /*
+     * Busca el día real dentro de la rutina.
+     */
+    const routineDay = routine.days.find(
+      (day) => day.dayName.trim().toLowerCase() === dayName.trim().toLowerCase()
+    );
 
-    if (!exercise) {
-      res.status(404).json({
-        message: "Ejercicio no encontrado",
+    if (!routineDay) {
+      res.status(400).json({
+        message: "El día seleccionado no pertenece a la rutina",
       });
       return;
     }
 
+    /*
+     * Busca el ejercicio real dentro del día.
+     */
+    const routineExercise = routineDay.exercises.find(
+      (item) => item.exerciseId.toString() === exerciseId
+    );
+
+    if (!routineExercise) {
+      res.status(400).json({
+        message: "El ejercicio no pertenece al día seleccionado",
+      });
+      return;
+    }
+
+    /*
+     * Series, repeticiones y descanso se obtienen de la rutina guardada.
+     * Ya no confiamos en valores enviados desde el frontend.
+     */
     const workoutLog = await WorkoutLog.create({
-      studentId: user._id,
-      routineId,
-      exerciseId,
-      dayName,
-      dayOrder,
-      setsPlanned,
-      repsPlanned,
-      restPlanned,
+      studentId: authenticatedUser._id,
+      routineId: routine._id,
+      exerciseId: routineExercise.exerciseId,
+      dayName: routineDay.dayName,
+      dayOrder: routineDay.order,
+      setsPlanned: routineExercise.sets,
+      repsPlanned: routineExercise.reps,
+      restPlanned: routineExercise.rest,
       weight,
-      repsDone,
-      notes,
+      repsDone: repsDone?.trim(),
+      notes: notes?.trim(),
       completedAt: new Date(),
     });
 
     const populatedLog = await WorkoutLog.findById(workoutLog._id)
-      .populate("exerciseId", "name description muscles difficulty")
+      .populate(
+        "exerciseId",
+        "name description imageUrl videoUrl muscles difficulty"
+      )
       .populate("routineId", "name objective level");
 
     res.status(201).json({
@@ -122,9 +189,10 @@ export const createWorkoutLog = async (
       workoutLog: populatedLog,
     });
   } catch (error) {
+    console.error("Error al registrar progreso:", error);
+
     res.status(500).json({
-      message: "Error al registrar progreso",
-      error,
+      message: "Error interno al registrar progreso",
     });
   }
 };
@@ -134,19 +202,42 @@ export const getMyWorkoutLogs = async (
   res: Response
 ): Promise<void> => {
   try {
-    const user = (req as any).user;
+    const authenticatedUser = (req as any).user;
 
-    if (user.role !== "student") {
+    if (!authenticatedUser?._id) {
+      res.status(401).json({
+        message: "Usuario no autenticado",
+      });
+      return;
+    }
+
+    if (authenticatedUser.role !== "student") {
       res.status(403).json({
         message: "Solo los alumnos pueden ver su progreso",
       });
       return;
     }
 
+    const student = await User.findOne({
+      _id: authenticatedUser._id,
+      role: "student",
+      active: true,
+    }).select("_id");
+
+    if (!student) {
+      res.status(403).json({
+        message: "La cuenta del alumno no existe o está inactiva",
+      });
+      return;
+    }
+
     const workoutLogs = await WorkoutLog.find({
-      studentId: user._id,
+      studentId: authenticatedUser._id,
     })
-      .populate("exerciseId", "name description muscles difficulty")
+      .populate(
+        "exerciseId",
+        "name description imageUrl videoUrl muscles difficulty"
+      )
       .populate("routineId", "name objective level")
       .sort({ completedAt: -1 });
 
@@ -155,9 +246,10 @@ export const getMyWorkoutLogs = async (
       workoutLogs,
     });
   } catch (error) {
+    console.error("Error al obtener progreso:", error);
+
     res.status(500).json({
-      message: "Error al obtener progreso",
-      error,
+      message: "Error interno al obtener progreso",
     });
   }
 };
@@ -167,11 +259,29 @@ export const getStudentWorkoutLogs = async (
   res: Response
 ): Promise<void> => {
   try {
+    const authenticatedUser = (req as any).user;
     const { studentId } = req.params;
+
+    if (!authenticatedUser?._id) {
+      res.status(401).json({
+        message: "Usuario no autenticado",
+      });
+      return;
+    }
+
+    if (
+      authenticatedUser.role !== "admin" &&
+      authenticatedUser.role !== "trainer"
+    ) {
+      res.status(403).json({
+        message: "No tenés permisos para consultar este progreso",
+      });
+      return;
+    }
 
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       res.status(400).json({
-        message: "El studentId no es válido",
+        message: "El ID del alumno no es válido",
       });
       return;
     }
@@ -191,7 +301,10 @@ export const getStudentWorkoutLogs = async (
     const workoutLogs = await WorkoutLog.find({
       studentId,
     })
-      .populate("exerciseId", "name description muscles difficulty")
+      .populate(
+        "exerciseId",
+        "name description imageUrl videoUrl muscles difficulty"
+      )
       .populate("routineId", "name objective level")
       .sort({ completedAt: -1 });
 
@@ -201,9 +314,10 @@ export const getStudentWorkoutLogs = async (
       workoutLogs,
     });
   } catch (error) {
+    console.error("Error al obtener progreso del alumno:", error);
+
     res.status(500).json({
-      message: "Error al obtener progreso del alumno",
-      error,
+      message: "Error interno al obtener progreso del alumno",
     });
   }
 }; 
