@@ -7,6 +7,7 @@ import studentRoutes from "./routes/student.routes";
 import exerciseRoutes from "./routes/exercise.routes";
 import routineRoutes from "./routes/routine.routes";
 import workoutLogRoutes from "./routes/workoutLog.routes";
+import gymRoutes from "./routes/gym.routes";
 
 const app = express();
 
@@ -52,5 +53,5 @@ app.use("/api/students", studentRoutes);
 app.use("/api/exercises", exerciseRoutes);
 app.use("/api/routines", routineRoutes);
 app.use("/api/workout-logs", workoutLogRoutes);
-
+app.use("/api/gyms", gymRoutes); 
 export default app; 

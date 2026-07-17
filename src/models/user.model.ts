@@ -1,6 +1,10 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
-export type UserRole = "admin" | "trainer" | "student";
+export type UserRole =
+  | "superadmin"
+  | "admin"
+  | "trainer"
+  | "student";
 
 export interface IUser extends Document {
   gymId?: Types.ObjectId;
@@ -51,7 +55,7 @@ const userSchema = new Schema<IUser>(
 
     role: {
       type: String,
-      enum: ["admin", "trainer", "student"],
+      enum: ["superadmin", "admin", "trainer", "student"],
       default: "student",
     },
 
@@ -72,7 +76,7 @@ const userSchema = new Schema<IUser>(
 );
 
 userSchema.index({
-  gymId: 1,
+  gymId: 1, 
   role: 1,
   active: 1,
 });

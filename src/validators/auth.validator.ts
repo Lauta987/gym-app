@@ -38,7 +38,7 @@ export const registerSchema = z.object({
     .max(72, "La contraseña no puede superar los 72 caracteres"),
 
   role: z
-    .enum(["admin", "trainer", "student"])
-    .optional()
-    .default("student"),
-});
+  .enum(["superadmin", "admin", "trainer", "student"])
+  .optional()
+  .default("student"),
+}); 

@@ -1,11 +1,17 @@
-import mongoose, { Document, Schema } from "mongoose";
+ import mongoose, { Document, Schema } from "mongoose";
+
+export type GymPlan = "basic" | "personalized" | "premium";
 
 export interface IGym extends Document {
   name: string;
   slug: string;
   logoUrl?: string;
-  primaryColor?: string;
-  secondaryColor?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  plan: GymPlan;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +32,7 @@ const gymSchema = new Schema<IGym>(
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: 60,
     },
 
     logoUrl: {
@@ -45,6 +52,28 @@ const gymSchema = new Schema<IGym>(
       default: "#111111",
     },
 
+    email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    phone: {
+      type: String,
+      trim: true,
+    },
+
+    address: {
+      type: String,
+      trim: true,
+    },
+
+    plan: {
+      type: String,
+      enum: ["basic", "personalized", "premium"],
+      default: "basic",
+    },
+
     active: {
       type: Boolean,
       default: true,
@@ -54,5 +83,10 @@ const gymSchema = new Schema<IGym>(
     timestamps: true,
   }
 );
+
+gymSchema.index({
+  active: 1,
+  createdAt: -1,
+});
 
 export const Gym = mongoose.model<IGym>("Gym", gymSchema); 

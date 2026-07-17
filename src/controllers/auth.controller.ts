@@ -13,6 +13,20 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
+    if (role === "superadmin") {
+      return res.status(403).json({
+        message: "No está permitido crear un superadministrador desde esta ruta",
+      });
+    }
+
+    const allowedRoles = ["admin", "trainer", "student"];
+
+    if (role && !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        message: "El rol enviado no es válido",
+      });
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     const userExists = await User.findOne({
@@ -31,8 +45,7 @@ export const register = async (req: Request, res: Response) => {
      * Si el registro lo realiza un administrador autenticado,
      * el nuevo usuario hereda el gimnasio del administrador.
      *
-     * Mientras terminamos la migración, gymId puede quedar vacío
-     * para los registros antiguos o iniciales.
+     * Un superadmin no usa esta ruta para crear otros superadmins.
      */
     const gymId = authenticatedUser?.gymId;
 
