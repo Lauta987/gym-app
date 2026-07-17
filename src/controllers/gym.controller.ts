@@ -542,4 +542,360 @@ export const deactivateGym = async (
       message: "Error interno al suspender gimnasio",
     });
   }
+};
+ interface CreateGymAdminBody {
+  name: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
+interface UpdateGymAdminStatusBody {
+  active: boolean;
+}
+
+interface ResetGymAdminPasswordBody {
+  password: string;
+}
+
+export const getGymAdmins = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const authenticatedUser = (req as any).user;
+    const { id } = req.params;
+
+    if (authenticatedUser?.role !== "superadmin") {
+      res.status(403).json({
+        message: "Solo el Super Admin puede consultar administradores",
+      });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        message: "ID de gimnasio inválido",
+      });
+      return;
+    }
+
+    const gym = await Gym.findById(id).select(
+      "_id name slug active"
+    );
+
+    if (!gym) {
+      res.status(404).json({
+        message: "Gimnasio no encontrado",
+      });
+      return;
+    }
+
+    const admins = await User.find({
+      gymId: gym._id,
+      role: "admin",
+    })
+      .select(
+        "_id gymId name lastName email role active createdAt updatedAt"
+      )
+      .sort({
+        createdAt: -1,
+      })
+      .lean();
+
+    res.json({
+      message: "Administradores obtenidos correctamente",
+      gym,
+      admins,
+    });
+  } catch (error) {
+    console.error("Error al obtener administradores:", error);
+
+    res.status(500).json({
+      message: "Error interno al obtener administradores",
+    });
+  }
+};
+
+export const createGymAdmin = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const authenticatedUser = (req as any).user;
+    const { id } = req.params;
+
+    const {
+      name,
+      lastName,
+      email,
+      password,
+    } = req.body as CreateGymAdminBody;
+
+    if (authenticatedUser?.role !== "superadmin") {
+      res.status(403).json({
+        message: "Solo el Super Admin puede crear administradores",
+      });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        message: "ID de gimnasio inválido",
+      });
+      return;
+    }
+
+    if (!name?.trim() || !lastName?.trim() || !email?.trim() || !password) {
+      res.status(400).json({
+        message:
+          "Nombre, apellido, email y contraseña son obligatorios",
+      });
+      return;
+    }
+
+    if (password.length < 8) {
+      res.status(400).json({
+        message: "La contraseña debe tener al menos 8 caracteres",
+      });
+      return;
+    }
+
+    if (password.length > 72) {
+      res.status(400).json({
+        message: "La contraseña no puede superar los 72 caracteres",
+      });
+      return;
+    }
+
+    const gym = await Gym.findById(id);
+
+    if (!gym) {
+      res.status(404).json({
+        message: "Gimnasio no encontrado",
+      });
+      return;
+    }
+
+    if (!gym.active) {
+      res.status(400).json({
+        message:
+          "No se pueden crear administradores para un gimnasio suspendido",
+      });
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      res.status(400).json({
+        message: "Ya existe un usuario registrado con ese email",
+      });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const admin = await User.create({
+      gymId: gym._id,
+      name: name.trim(),
+      lastName: lastName.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "admin",
+      active: true,
+    });
+
+    res.status(201).json({
+      message: "Administrador creado correctamente",
+      admin: {
+        id: admin._id,
+        gymId: admin.gymId,
+        name: admin.name,
+        lastName: admin.lastName,
+        email: admin.email,
+        role: admin.role,
+        active: admin.active,
+        createdAt: admin.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error al crear administrador:", error);
+
+    res.status(500).json({
+      message: "Error interno al crear administrador",
+    });
+  }
+};
+
+export const updateGymAdminStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const authenticatedUser = (req as any).user;
+    const { id, adminId } = req.params;
+    const { active } = req.body as UpdateGymAdminStatusBody;
+
+    if (authenticatedUser?.role !== "superadmin") {
+      res.status(403).json({
+        message:
+          "Solo el Super Admin puede modificar administradores",
+      });
+      return;
+    }
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(adminId)
+    ) {
+      res.status(400).json({
+        message: "ID inválido",
+      });
+      return;
+    }
+
+    if (typeof active !== "boolean") {
+      res.status(400).json({
+        message: "El estado active debe ser verdadero o falso",
+      });
+      return;
+    }
+
+    const gym = await Gym.findById(id);
+
+    if (!gym) {
+      res.status(404).json({
+        message: "Gimnasio no encontrado",
+      });
+      return;
+    }
+
+    if (active && !gym.active) {
+      res.status(400).json({
+        message:
+          "No se puede activar un administrador de un gimnasio suspendido",
+      });
+      return;
+    }
+
+    const admin = await User.findOne({
+      _id: adminId,
+      gymId: gym._id,
+      role: "admin",
+    });
+
+    if (!admin) {
+      res.status(404).json({
+        message: "Administrador no encontrado en este gimnasio",
+      });
+      return;
+    }
+
+    admin.active = active;
+    await admin.save();
+
+    res.json({
+      message: active
+        ? "Administrador activado correctamente"
+        : "Administrador desactivado correctamente",
+      admin: {
+        id: admin._id,
+        gymId: admin.gymId,
+        name: admin.name,
+        lastName: admin.lastName,
+        email: admin.email,
+        role: admin.role,
+        active: admin.active,
+        updatedAt: admin.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Error al actualizar estado del administrador:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Error interno al actualizar el estado del administrador",
+    });
+  }
+};
+
+export const resetGymAdminPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const authenticatedUser = (req as any).user;
+    const { id, adminId } = req.params;
+    const { password } = req.body as ResetGymAdminPasswordBody;
+
+    if (authenticatedUser?.role !== "superadmin") {
+      res.status(403).json({
+        message:
+          "Solo el Super Admin puede cambiar contraseñas de administradores",
+      });
+      return;
+    }
+
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(adminId)
+    ) {
+      res.status(400).json({
+        message: "ID inválido",
+      });
+      return;
+    }
+
+    if (!password || password.length < 8) {
+      res.status(400).json({
+        message: "La contraseña debe tener al menos 8 caracteres",
+      });
+      return;
+    }
+
+    if (password.length > 72) {
+      res.status(400).json({
+        message: "La contraseña no puede superar los 72 caracteres",
+      });
+      return;
+    }
+
+    const admin = await User.findOne({
+      _id: adminId,
+      gymId: id,
+      role: "admin",
+    });
+
+    if (!admin) {
+      res.status(404).json({
+        message: "Administrador no encontrado en este gimnasio",
+      });
+      return;
+    }
+
+    admin.password = await bcrypt.hash(password, 12);
+    await admin.save();
+
+    res.json({
+      message: "Contraseña actualizada correctamente",
+    });
+  } catch (error) {
+    console.error(
+      "Error al cambiar contraseña del administrador:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Error interno al cambiar la contraseña del administrador",
+    });
+  }
 }; 
