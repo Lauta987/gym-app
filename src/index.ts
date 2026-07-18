@@ -1,8 +1,7 @@
-import dotenv from "dotenv";
+import "dotenv/config";
+
 import app from "./app";
 import { connectDB } from "./config/db";
-
-dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 
@@ -10,4 +9,5 @@ connectDB();
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log("Rutas públicas disponibles en /api/public/gyms");
 }); 
