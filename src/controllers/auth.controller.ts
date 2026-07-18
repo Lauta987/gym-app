@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
+import { Gym } from "../models/gym.model";
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -118,6 +119,26 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    let gym = null;
+
+    if (user.gymId) {
+      gym = await Gym.findById(user.gymId).select(
+        "_id name slug logoUrl primaryColor secondaryColor active"
+      );
+
+      if (!gym) {
+        return res.status(404).json({
+          message: "No se encontró el gimnasio asociado al usuario",
+        });
+      }
+
+      if (!gym.active) {
+        return res.status(403).json({
+          message: "El gimnasio se encuentra suspendido",
+        });
+      }
+    }
+
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!jwtSecret) {
@@ -143,6 +164,7 @@ export const login = async (req: Request, res: Response) => {
     return res.json({
       message: "Login correcto",
       token,
+
       user: {
         id: user._id,
         gymId: user.gymId ?? null,
@@ -152,6 +174,17 @@ export const login = async (req: Request, res: Response) => {
         role: user.role,
         active: user.active,
       },
+
+      gym: gym
+        ? {
+            _id: gym._id,
+            name: gym.name,
+            slug: gym.slug,
+            logoUrl: gym.logoUrl,
+            primaryColor: gym.primaryColor,
+            secondaryColor: gym.secondaryColor,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Error al iniciar sesión:", error);
@@ -160,7 +193,7 @@ export const login = async (req: Request, res: Response) => {
       message: "Error interno al iniciar sesión",
     });
   }
-};
+}; 
 
 export const getProfile = async (
   req: Request,
