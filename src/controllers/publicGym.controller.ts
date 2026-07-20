@@ -34,8 +34,7 @@ function addVersionToUrl(
 }
 
 /*
- * Devuelve la identidad pública de un gimnasio.
- * No expone usuarios, administradores ni información privada.
+ * Devuelve los datos públicos del gimnasio.
  */
 export const getPublicGymBySlug = async (
   req: Request,
@@ -57,7 +56,7 @@ export const getPublicGymBySlug = async (
       active: true,
     })
       .select(
-        "_id name slug logoUrl primaryColor secondaryColor active"
+        "_id name slug logoUrl primaryColor secondaryColor active updatedAt"
       )
       .lean();
 
@@ -69,6 +68,15 @@ export const getPublicGymBySlug = async (
       return;
     }
 
+    const gymWithTimestamp = gym as typeof gym & {
+      updatedAt?: Date;
+    };
+
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate"
+    );
+
     res.status(200).json({
       message: "Gimnasio obtenido correctamente",
 
@@ -79,6 +87,8 @@ export const getPublicGymBySlug = async (
         logoUrl: gym.logoUrl,
         primaryColor: gym.primaryColor,
         secondaryColor: gym.secondaryColor,
+        updatedAt:
+          gymWithTimestamp.updatedAt?.toISOString(),
       },
     });
   } catch (error) {
@@ -94,7 +104,7 @@ export const getPublicGymBySlug = async (
 };
 
 /*
- * Genera el manifiesto instalable específico de cada gimnasio.
+ * Genera el manifest correspondiente a cada gimnasio.
  */
 export const getGymManifest = async (
   req: Request,
@@ -130,56 +140,64 @@ export const getGymManifest = async (
 
     const frontendUrl = getFrontendUrl();
 
-    const gymStartUrl =
-      `${frontendUrl}/gym/${encodeURIComponent(gym.slug)}`;
+    /*
+     * Esta dirección identifica la instalación correspondiente
+     * a este gimnasio.
+     */
+    const gymAppId =
+      `${frontendUrl}/gym/` +
+      encodeURIComponent(gym.slug);
 
     /*
-     * Usamos updatedAt para cambiar la versión del ícono
-     * cuando se actualiza el gimnasio.
+     * Cuando el alumno abre la PWA instalada,
+     * se abre directamente Mi Rutina.
+     *
+     * El parámetro gym permite recuperar el gimnasio
+     * incluso si localStorage todavía no estuviera disponible.
      */
+    const gymStartUrl =
+      `${frontendUrl}/my-routine?gym=` +
+      encodeURIComponent(gym.slug);
+
     const gymWithTimestamp = gym as typeof gym & {
       updatedAt?: Date;
     };
 
     const iconVersion =
       gymWithTimestamp.updatedAt instanceof Date
-        ? gymWithTimestamp.updatedAt.getTime().toString()
+        ? gymWithTimestamp.updatedAt
+            .getTime()
+            .toString()
         : Date.now().toString();
 
     let icons;
 
     if (gym.logoUrl) {
-      const versionedLogoUrl = addVersionToUrl(
+      const logoUrl = addVersionToUrl(
         gym.logoUrl,
         iconVersion
       );
 
       /*
-       * Cuando existe un logo personalizado, se utiliza
-       * tanto para el ícono de 192 como para el de 512.
-       *
-       * Así se evita que el teléfono elija el viejo
-       * icon-192.png de GymStart.
+       * Se usa el logo personalizado en ambos tamaños
+       * para evitar que el teléfono seleccione el logo
+       * general de GymStart.
        */
       icons = [
         {
-          src: versionedLogoUrl,
+          src: logoUrl,
           sizes: "192x192",
           type: "image/png",
           purpose: "any",
         },
         {
-          src: versionedLogoUrl,
+          src: logoUrl,
           sizes: "512x512",
           type: "image/png",
           purpose: "any",
         },
       ];
     } else {
-      /*
-       * Los íconos generales se usan solamente cuando
-       * el gimnasio no tiene un logo configurado.
-       */
       icons = [
         {
           src: addVersionToUrl(
@@ -203,7 +221,7 @@ export const getGymManifest = async (
     }
 
     const manifest = {
-      id: gymStartUrl,
+      id: gymAppId,
 
       name: gym.name,
 
@@ -212,7 +230,8 @@ export const getGymManifest = async (
           ? gym.name.slice(0, 20)
           : gym.name,
 
-      description: `Rutinas y progreso de ${gym.name}`,
+      description:
+        `Rutinas y progreso de ${gym.name}`,
 
       start_url: gymStartUrl,
 
@@ -238,19 +257,11 @@ export const getGymManifest = async (
       "application/manifest+json; charset=utf-8"
     );
 
-    /*
-     * Permite utilizar el manifest desde el frontend
-     * aunque backend y frontend tengan dominios diferentes.
-     */
     res.setHeader(
       "Cross-Origin-Resource-Policy",
       "cross-origin"
     );
 
-    /*
-     * Evita que el navegador siga mostrando el manifiesto
-     * anterior durante las pruebas.
-     */
     res.setHeader(
       "Cache-Control",
       "no-store, no-cache, must-revalidate, proxy-revalidate"
@@ -269,7 +280,8 @@ export const getGymManifest = async (
     );
 
     res.status(500).json({
-      message: "Error interno al generar el manifiesto",
+      message:
+        "Error interno al generar el manifiesto",
     });
   }
 }; 
