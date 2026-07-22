@@ -1,26 +1,42 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+
 import { User } from "../models/user.model";
 import { Gym } from "../models/gym.model";
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const { name, lastName, email, password, role } = req.body;
+    const {
+      name,
+      lastName,
+      email,
+      password,
+      role,
+    } = req.body;
 
     if (!name || !lastName || !email || !password) {
       return res.status(400).json({
-        message: "Todos los campos obligatorios deben estar completos",
+        message:
+          "Todos los campos obligatorios deben estar completos",
       });
     }
 
     if (role === "superadmin") {
       return res.status(403).json({
-        message: "No está permitido crear un superadministrador desde esta ruta",
+        message:
+          "No está permitido crear un superadministrador desde esta ruta",
       });
     }
 
-    const allowedRoles = ["admin", "trainer", "student"];
+    const allowedRoles = [
+      "admin",
+      "trainer",
+      "student",
+    ];
 
     if (role && !allowedRoles.includes(role)) {
       return res.status(400).json({
@@ -28,7 +44,8 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail =
+      email.trim().toLowerCase();
 
     const userExists = await User.findOne({
       email: normalizedEmail,
@@ -36,21 +53,18 @@ export const register = async (req: Request, res: Response) => {
 
     if (userExists) {
       return res.status(400).json({
-        message: "Ya existe un usuario con ese email",
+        message:
+          "Ya existe un usuario con ese email",
       });
     }
 
-    const authenticatedUser = (req as any).user;
+    const authenticatedUser =
+      (req as any).user;
 
-    /*
-     * Si el registro lo realiza un administrador autenticado,
-     * el nuevo usuario hereda el gimnasio del administrador.
-     *
-     * Un superadmin no usa esta ruta para crear otros superadmins.
-     */
     const gymId = authenticatedUser?.gymId;
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword =
+      await bcrypt.hash(password, 10);
 
     const user = await User.create({
       gymId,
@@ -75,25 +89,34 @@ export const register = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error("Error al registrar usuario:", error);
+    console.error(
+      "Error al registrar usuario:",
+      error
+    );
 
     return res.status(500).json({
-      message: "Error interno al registrar usuario",
+      message:
+        "Error interno al registrar usuario",
     });
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
-        message: "Email y contraseña son obligatorios",
+        message:
+          "Email y contraseña son obligatorios",
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail =
+      email.trim().toLowerCase();
 
     const user = await User.findOne({
       email: normalizedEmail,
@@ -105,7 +128,11 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid =
+      await bcrypt.compare(
+        password,
+        user.password
+      );
 
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -115,37 +142,46 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user.active) {
       return res.status(403).json({
-        message: "El usuario se encuentra desactivado",
+        message:
+          "El usuario se encuentra desactivado",
       });
     }
 
     let gym = null;
 
     if (user.gymId) {
-      gym = await Gym.findById(user.gymId).select(
-        "_id name slug logoUrl primaryColor secondaryColor active"
+      gym = await Gym.findById(
+        user.gymId
+      ).select(
+        "_id name slug logoUrl primaryColor secondaryColor backgroundColor active updatedAt"
       );
 
       if (!gym) {
         return res.status(404).json({
-          message: "No se encontró el gimnasio asociado al usuario",
+          message:
+            "No se encontró el gimnasio asociado al usuario",
         });
       }
 
       if (!gym.active) {
         return res.status(403).json({
-          message: "El gimnasio se encuentra suspendido",
+          message:
+            "El gimnasio se encuentra suspendido",
         });
       }
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
+    const jwtSecret =
+      process.env.JWT_SECRET;
 
     if (!jwtSecret) {
-      console.error("JWT_SECRET no está configurado");
+      console.error(
+        "JWT_SECRET no está configurado"
+      );
 
       return res.status(500).json({
-        message: "Error de configuración del servidor",
+        message:
+          "Error de configuración del servidor",
       });
     }
 
@@ -153,7 +189,8 @@ export const login = async (req: Request, res: Response) => {
       {
         id: user._id.toString(),
         role: user.role,
-        gymId: user.gymId?.toString() ?? null,
+        gymId:
+          user.gymId?.toString() ?? null,
       },
       jwtSecret,
       {
@@ -181,19 +218,29 @@ export const login = async (req: Request, res: Response) => {
             name: gym.name,
             slug: gym.slug,
             logoUrl: gym.logoUrl,
-            primaryColor: gym.primaryColor,
-            secondaryColor: gym.secondaryColor,
+            primaryColor:
+              gym.primaryColor,
+            secondaryColor:
+              gym.secondaryColor,
+            backgroundColor:
+              gym.backgroundColor,
+            updatedAt:
+              gym.updatedAt?.toISOString(),
           }
         : null,
     });
   } catch (error) {
-    console.error("Error al iniciar sesión:", error);
+    console.error(
+      "Error al iniciar sesión:",
+      error
+    );
 
     return res.status(500).json({
-      message: "Error interno al iniciar sesión",
+      message:
+        "Error interno al iniciar sesión",
     });
   }
-}; 
+};
 
 export const getProfile = async (
   req: Request,
@@ -209,7 +256,8 @@ export const getProfile = async (
     }
 
     return res.json({
-      message: "Perfil obtenido correctamente",
+      message:
+        "Perfil obtenido correctamente",
       user: {
         id: user._id,
         gymId: user.gymId ?? null,
@@ -218,14 +266,19 @@ export const getProfile = async (
         email: user.email,
         role: user.role,
         active: user.active,
-        assignedRoutine: user.assignedRoutine ?? null,
+        assignedRoutine:
+          user.assignedRoutine ?? null,
       },
     });
   } catch (error) {
-    console.error("Error al obtener perfil:", error);
+    console.error(
+      "Error al obtener perfil:",
+      error
+    );
 
     return res.status(500).json({
-      message: "Error interno al obtener perfil",
+      message:
+        "Error interno al obtener perfil",
     });
   }
 }; 

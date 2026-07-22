@@ -1,4 +1,4 @@
- import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
 
 export type GymPlan = "basic" | "personalized" | "premium";
 
@@ -8,6 +8,7 @@ export interface IGym extends Document {
   logoUrl?: string;
   primaryColor: string;
   secondaryColor: string;
+  backgroundColor: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -50,6 +51,12 @@ const gymSchema = new Schema<IGym>(
       type: String,
       trim: true,
       default: "#111111",
+    },
+
+    backgroundColor: {
+      type: String,
+      trim: true,
+      default: "#f5efe5",
     },
 
     email: {

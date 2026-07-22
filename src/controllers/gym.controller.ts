@@ -14,6 +14,7 @@ interface CreateGymBody {
   logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
+  backgroundColor?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -31,6 +32,7 @@ interface UpdateGymBody {
   logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
+  backgroundColor?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -74,6 +76,7 @@ export const createGym = async (
       logoUrl,
       primaryColor,
       secondaryColor,
+      backgroundColor,
       email,
       phone,
       address,
@@ -121,6 +124,13 @@ export const createGym = async (
       return;
     }
 
+    if (backgroundColor && !isValidHexColor(backgroundColor)) {
+      res.status(400).json({
+        message: "El color de fondo debe tener formato hexadecimal",
+      });
+      return;
+    }
+
     const normalizedSlug = normalizeSlug(slug);
     const normalizedAdminEmail = adminEmail.trim().toLowerCase();
 
@@ -156,6 +166,7 @@ export const createGym = async (
       logoUrl: logoUrl?.trim(),
       primaryColor: primaryColor || "#ff5a1f",
       secondaryColor: secondaryColor || "#111111",
+      backgroundColor: backgroundColor || "#f5efe5",
       email: email?.trim().toLowerCase(),
       phone: phone?.trim(),
       address: address?.trim(),
@@ -377,6 +388,7 @@ export const updateGym = async (
       logoUrl,
       primaryColor,
       secondaryColor,
+      backgroundColor,
       email,
       phone,
       address,
@@ -439,11 +451,21 @@ export const updateGym = async (
       return;
     }
 
+    if (backgroundColor && !isValidHexColor(backgroundColor)) {
+      res.status(400).json({
+        message: "El color de fondo debe tener formato hexadecimal",
+      });
+      return;
+    }
+
     if (name !== undefined) gym.name = name.trim();
     if (logoUrl !== undefined) gym.logoUrl = logoUrl.trim() || undefined;
     if (primaryColor !== undefined) gym.primaryColor = primaryColor;
     if (secondaryColor !== undefined) {
       gym.secondaryColor = secondaryColor;
+    }
+    if (backgroundColor !== undefined) {
+      gym.backgroundColor = backgroundColor;
     }
     if (email !== undefined) {
       gym.email = email.trim().toLowerCase() || undefined;
@@ -898,4 +920,4 @@ export const resetGymAdminPassword = async (
         "Error interno al cambiar la contraseña del administrador",
     });
   }
-}; 
+};  

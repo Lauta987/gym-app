@@ -47,7 +47,6 @@ export const getPublicGymBySlug = async (
       res.status(400).json({
         message: "Slug de gimnasio inválido",
       });
-
       return;
     }
 
@@ -56,7 +55,7 @@ export const getPublicGymBySlug = async (
       active: true,
     })
       .select(
-        "_id name slug logoUrl primaryColor secondaryColor active updatedAt"
+        "_id name slug logoUrl primaryColor secondaryColor backgroundColor active updatedAt"
       )
       .lean();
 
@@ -64,7 +63,6 @@ export const getPublicGymBySlug = async (
       res.status(404).json({
         message: "Gimnasio no encontrado",
       });
-
       return;
     }
 
@@ -87,6 +85,7 @@ export const getPublicGymBySlug = async (
         logoUrl: gym.logoUrl,
         primaryColor: gym.primaryColor,
         secondaryColor: gym.secondaryColor,
+        backgroundColor: gym.backgroundColor,
         updatedAt:
           gymWithTimestamp.updatedAt?.toISOString(),
       },
@@ -117,7 +116,6 @@ export const getGymManifest = async (
       res.status(400).json({
         message: "Slug de gimnasio inválido",
       });
-
       return;
     }
 
@@ -126,7 +124,7 @@ export const getGymManifest = async (
       active: true,
     })
       .select(
-        "name slug logoUrl primaryColor secondaryColor active updatedAt"
+        "name slug logoUrl primaryColor secondaryColor backgroundColor active updatedAt"
       )
       .lean();
 
@@ -134,27 +132,15 @@ export const getGymManifest = async (
       res.status(404).json({
         message: "Gimnasio no encontrado",
       });
-
       return;
     }
 
     const frontendUrl = getFrontendUrl();
 
-    /*
-     * Esta dirección identifica la instalación correspondiente
-     * a este gimnasio.
-     */
     const gymAppId =
       `${frontendUrl}/gym/` +
       encodeURIComponent(gym.slug);
 
-    /*
-     * Cuando el alumno abre la PWA instalada,
-     * se abre directamente Mi Rutina.
-     *
-     * El parámetro gym permite recuperar el gimnasio
-     * incluso si localStorage todavía no estuviera disponible.
-     */
     const gymStartUrl =
       `${frontendUrl}/my-routine?gym=` +
       encodeURIComponent(gym.slug);
@@ -170,85 +156,66 @@ export const getGymManifest = async (
             .toString()
         : Date.now().toString();
 
-    let icons;
-
-    if (gym.logoUrl) {
-      const logoUrl = addVersionToUrl(
-        gym.logoUrl,
-        iconVersion
-      );
-
-      /*
-       * Se usa el logo personalizado en ambos tamaños
-       * para evitar que el teléfono seleccione el logo
-       * general de GymStart.
-       */
-      icons = [
-        {
-          src: logoUrl,
-          sizes: "192x192",
-          type: "image/png",
-          purpose: "any",
-        },
-        {
-          src: logoUrl,
-          sizes: "512x512",
-          type: "image/png",
-          purpose: "any",
-        },
-      ];
-    } else {
-      icons = [
-        {
-          src: addVersionToUrl(
-            `${frontendUrl}/icon-192.png`,
-            iconVersion
-          ),
-          sizes: "192x192",
-          type: "image/png",
-          purpose: "any",
-        },
-        {
-          src: addVersionToUrl(
-            `${frontendUrl}/icon-512.png`,
-            iconVersion
-          ),
-          sizes: "512x512",
-          type: "image/png",
-          purpose: "any",
-        },
-      ];
-    }
+    const icons = gym.logoUrl
+      ? [
+          {
+            src: addVersionToUrl(
+              gym.logoUrl,
+              iconVersion
+            ),
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: addVersionToUrl(
+              gym.logoUrl,
+              iconVersion
+            ),
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+        ]
+      : [
+          {
+            src: addVersionToUrl(
+              `${frontendUrl}/icon-192.png`,
+              iconVersion
+            ),
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: addVersionToUrl(
+              `${frontendUrl}/icon-512.png`,
+              iconVersion
+            ),
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+        ];
 
     const manifest = {
       id: gymAppId,
-
       name: gym.name,
-
       short_name:
         gym.name.length > 20
           ? gym.name.slice(0, 20)
           : gym.name,
-
       description:
         `Rutinas y progreso de ${gym.name}`,
-
       start_url: gymStartUrl,
-
       scope: `${frontendUrl}/`,
-
       display: "standalone",
-
       orientation: "portrait",
-
       theme_color:
         gym.primaryColor || "#dc2626",
-
       background_color:
-        gym.secondaryColor || "#111111",
-
+        gym.backgroundColor || "#f5efe5",
       icons,
-
       prefer_related_applications: false,
     };
 
